@@ -1,3 +1,5 @@
+import sys
+import argparse
 import cv2
 import math
 from scipy.spatial import distance
@@ -9,6 +11,11 @@ WHITE = (255, 255, 255)
 BLUE = (255, 0, 0)
 GREEN = (0, 255, 0)
 RED = (0, 0, 255)
+
+def parseArguments(argv):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--filename', type=str, help='Path to the image to be processed', default='./images/1.jpg')
+    return parser.parse_args(argv)
 
 def findContourCentroid(contour):
     # compute centroid of contour
@@ -43,13 +50,13 @@ def takespread(sequence, num):
     for i in range(num):
         yield sequence[int(math.ceil(i * length / num))]
 
-def main(filename):
-    print(filename)
+def main(args):
+    print(args.filename)
 
     border = 100
     kernel = np.ones((3,3),np.uint8)
 
-    image = cv2.imread(filename)
+    image = cv2.imread(args.filename)
     # image = cv2.resize(image, (400,400))
 
     grey_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -59,16 +66,21 @@ def main(filename):
 
     # crop to centroid of detected circles and resize to 400*400
     circles_centroid = centroidnp(circles[0,:])
-    # cv2.circle(image, (int(circles_centroid[0]), int(circles_centroid[1])), int(circles_centroid[2]), RED, 2)
-    crop_image = image[int(circles_centroid[1])-int(circles_centroid[2])-border:int(circles_centroid[1])+int(circles_centroid[2])+border, int(circles_centroid[0])-int(circles_centroid[2])-border:int(circles_centroid[0])+int(circles_centroid[2])+border]
+    ymin = int(circles_centroid[1] - circles_centroid[2] - border)
+    ymax = int(circles_centroid[1] + circles_centroid[2] + border)
+    xmin = int(circles_centroid[0] - circles_centroid[2] - border)
+    xmax = int(circles_centroid[0] + circles_centroid[2] + border)
+    crop_image = image[ymin:ymax, xmin:xmax]
     crop_image = cv2.resize(crop_image, (400, 400))
-    crop_image = cv2.cvtColor(crop_image, cv2.COLOR_RGB2GRAY)
+
+    grey_crop_image = cv2.cvtColor(crop_image, cv2.COLOR_RGB2GRAY)
 
     contours_image = np.copy(crop_image)
 
-    ret, thresh_image = cv2.threshold(crop_image, 150, 255, cv2.THRESH_BINARY)
-    # thresh_image = cv2.morphologyEx(thresh_image, cv2.MORPH_CLOSE, kernel)
-    thresh_image = cv2.erode(thresh_image, kernel)
+    # apply Gaussian blur and Otsu thresholding
+    # grey_crop_image = cv2.GaussianBlur(grey_crop_image, (11, 11), 0)
+    grey_crop_image = cv2.GaussianBlur(grey_crop_image, (5, 5), 0)
+    ret, thresh_image = cv2.threshold(grey_crop_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     contours, hierarchy = cv2.findContours(thresh_image, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 
@@ -87,6 +99,8 @@ def main(filename):
     cv2.imshow('circle', crop_image)
     cv2.imshow('thresh', thresh_image)
     cv2.imshow('contours', contours_image)
+    plt.hist(grey_crop_image.ravel(), 256, [0, 256])
+    plt.show()
     cv2.waitKey(0)
 
     radii = findRadii(contour, centroid)
@@ -99,7 +113,5 @@ def main(filename):
     plt.show()
 
 if __name__ == "__main__":
-    main('mikhail.jpg')
-    # main('perfect_circle.jpg')
-    # main('circle.jpg')
-    # main('circle2.jpg')
+    args = parseArguments(sys.argv[1:])
+    main(args)
